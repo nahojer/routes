@@ -11,15 +11,16 @@ import (
 )
 
 func Example() {
-	type Handler func(ctx context.Context, w http.ResponseWriter, r *http.Request)
+	type ctxKey string
 
-	rt := routes.NewTrie[Handler]()
+	rt := routes.NewTrie[http.Handler]()
 
-	rt.Add(http.MethodGet, "/ping/:pong", func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-		pong := ctx.Value("pong").(string)
+	handlePing := func(w http.ResponseWriter, r *http.Request) {
+		pong := r.Context().Value(ctxKey("pong")).(string)
 		w.WriteHeader(200)
 		fmt.Fprint(w, pong)
-	})
+	}
+	rt.Add(http.MethodGet, "/ping/:pong", http.HandlerFunc(handlePing))
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/ping/"+url.PathEscape("It's-a me, Mario!"), nil)
 	w := httptest.NewRecorder()
@@ -29,8 +30,8 @@ func Example() {
 		panic("never reached")
 	}
 
-	ctx := context.WithValue(req.Context(), "pong", params["pong"])
-	h(ctx, w, req)
+	req = req.WithContext(context.WithValue(req.Context(), ctxKey("pong"), params["pong"]))
+	h.ServeHTTP(w, req)
 
 	fmt.Printf("Status: %d\n", w.Code)
 	fmt.Printf("Body: %q\n", w.Body.String())
